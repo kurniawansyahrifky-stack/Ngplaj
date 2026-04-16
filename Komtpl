@@ -17,50 +17,44 @@ from main.database_sqlite import groupdb
 from main.utilities import BOT, notification
 
 
+@BOT.COMMAND("addprogroup")
+@BOT.OWNER
+@error_handler
 async def add_pro_customer_func(client, message):
-    chat_id, days = await client.extract_chat_and_reason(message)
-    if not chat_id:
-        return await message.reply("><b>⚠️ Please give me a group chat ID!</b>")
-    logger(__name__).info(f"Chat ID: {chat_id} Days: {days}")
-    try:
-        days = int(days)
-        if days <= 0:
-            return await message.reply("><b>⚠️ Days must be a positive number!</b>")
-    except (TypeError, ValueError):
-        return await message.reply("><b>⚠️ Days must be a valid integer!</b>")
 
-    proses = await message.reply("><b>Process add <i>Pro Features</i> ..</b>")
+    args = message.text.split()
+
+    if len(args) < 2:
+        return await message.reply("⚠️ Format: /addprogroup -100xxxx 30")
+
+    chat_id = args[1]
+
+    # days optional
+    if len(args) < 3:
+        days = 999999
+    else:
+        try:
+            days = int(args[2])
+            if days <= 0:
+                return await message.reply("⚠️ Days harus lebih dari 0!")
+        except:
+            return await message.reply("⚠️ Days harus angka!")
+
+    proses = await message.reply("Processing...")
+
     try:
         chat = await client.get_chat(chat_id)
         chat_title = chat.title or str(chat_id)
 
         added_pro = await groupdb.add_pro(chat_id, days)
+
         if added_pro:
-            return await notification(
-                client,
-                message,
-                proses,
-                f"><b>✅ Successfully added {chat_title} to pro list for {days} days</b>",
-                3,
-            )
+            return await message.reply(f"✅ {chat_title} PRO {days} hari")
         else:
-            return await notification(
-                client,
-                message,
-                proses,
-                f"><b>❌ Failed to add {chat_title} to pro list</b>",
-                3,
-            )
+            return await message.reply("❌ Gagal set PRO")
 
     except Exception as e:
-        return await notification(
-            client,
-            message,
-            proses,
-            f"><b>⚠️ Error occurred:</b>\n\n<pre><code>{e}</code></pre>",
-            5,
-        )
-
+        return await message.reply(f"Error:\n{e}")
 
 async def add_free_customer_func(client, message):
     chat_id, _ = await client.extract_chat_and_reason(message)
