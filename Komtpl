@@ -1,0 +1,276 @@
+import math
+
+from pykeyboard import InlineButton, InlineKeyboard
+from pyrogram import Client
+from pyrogram.errors import (
+    ChannelInvalid,
+    ChannelPrivate,
+    ChatAdminRequired,
+    ChatWriteForbidden,
+    MessageAuthorRequired,
+    PeerIdInvalid,
+)
+from pyrogram.types import CallbackQuery, Message
+
+from loggers import logger
+from main.database_sqlite import groupdb
+from main.utilities import BOT, notification
+
+
+async def add_pro_customer_func(client, message):
+    chat_id, days = await client.extract_chat_and_reason(message)
+    if not chat_id:
+        return await message.reply("><b>⚠️ Please give me a group chat ID!</b>")
+    logger(__name__).info(f"Chat ID: {chat_id} Days: {days}")
+    try:
+        days = int(days)
+        if days <= 0:
+            return await message.reply("><b>⚠️ Days must be a positive number!</b>")
+    except (TypeError, ValueError):
+        return await message.reply("><b>⚠️ Days must be a valid integer!</b>")
+
+    proses = await message.reply("><b>Process add <i>Pro Features</i> ..</b>")
+    try:
+        chat = await client.get_chat(chat_id)
+        chat_title = chat.title or str(chat_id)
+
+        added_pro = await groupdb.add_pro(chat_id, days)
+        if added_pro:
+            return await notification(
+                client,
+                message,
+                proses,
+                f"><b>✅ Successfully added {chat_title} to pro list for {days} days</b>",
+                3,
+            )
+        else:
+            return await notification(
+                client,
+                message,
+                proses,
+                f"><b>❌ Failed to add {chat_title} to pro list</b>",
+                3,
+            )
+
+    except Exception as e:
+        return await notification(
+            client,
+            message,
+            proses,
+            f"><b>⚠️ Error occurred:</b>\n\n<pre><code>{e}</code></pre>",
+            5,
+        )
+
+
+async def add_free_customer_func(client, message):
+    chat_id, _ = await client.extract_chat_and_reason(message)
+    if not chat_id:
+        return await message.reply("><b>⚠️ Please give me a group chat ID!</b>")
+    proses = await message.reply("><b>Process add <i>Free Features</i> ..</b>")
+    try:
+        chat = await client.get_chat(chat_id)
+        chat_title = chat.title
+        added_free = await groupdb.add_free(chat_id)
+        if added_free:
+            return await notification(
+                client,
+                message,
+                proses,
+                f"><b>Successfully added {chat_title} as a free group</b>",
+            )
+        else:
+            return await notification(
+                client,
+                message,
+                proses,
+                f"><b>Failed to add {chat_title} as a free group</b>",
+            )
+    except Exception as e:
+        return await notification(
+            client,
+            message,
+            proses,
+            f"><b>Error occurred:</b>\n\n<pre><code>{e}</code></pre>",
+        )
+
+
+async def remove_pro_customer_func(client, message):
+    chat_id, _ = await client.extract_chat_and_reason(message)
+    if not chat_id:
+        return await message.reply("><b>⚠️ Please give me a group chat ID!</b>")
+    proses = await message.reply("><b>Process remove <i>Pro Features</i> ..</b>")
+    try:
+        chat = await client.get_chat(chat_id)
+        chat_title = chat.title
+        removed_pro = await groupdb.remove_pro(chat_id)
+        if removed_pro:
+            return await notification(
+                client,
+                message,
+                proses,
+                f"><b>Successfully removed pro status from {chat_title}</b>",
+                5,
+            )
+        else:
+            return await notification(
+                client,
+                message,
+                proses,
+                f"><b>Failed to remove pro status from {chat_title}</b>",
+            )
+    except Exception as e:
+        return await notification(
+            client,
+            message,
+            proses,
+            f"><b>Error occurred:</b>\n\n<pre><code>{e}</code></pre>",
+            5,
+        )
+
+
+ITEMS_PER_PAGE = 1
+all_groups = []
+
+
+async def get_page_content(client, page):
+    start = (page - 1) * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    page_groups = all_groups[start:end]
+
+    group_info_list = []
+    for group in page_groups:
+        chat_id = group["chat_id"]
+        try:
+            chat = await client.get_chat(chat_id)
+            chat_title = chat.title
+            is_pro = await groupdb.is_pro(chat_id)
+            status = "Pro" if is_pro else "Free"
+            expiry_date = group.get("expiry_date", "N/A")
+            if expiry_date != "N/A":
+                expiry_date = expiry_date.strftime("%Y-%m-%d %H:%M:%S")
+            antibc_state = "Enabled" if group.get("antibc_state", False) else "Disabled"
+            antispam_state = (
+                "Enabled" if group.get("antispam_state", False) else "Disabled"
+            )
+
+            # Check if the bot is a member and has necessary permissions
+            bot_member = await chat.get_member(client.me.id)
+            bot_status = (
+                "Admin"
+                if bot_member.status in ["administrator", "creator"]
+                else "Member"
+            )
+
+            group_info = (
+                f"Title: {chat_title}\n"
+                f"ID: {chat_id}\n"
+                f"Status: {status}\n"
+                f"Expiry Date: {expiry_date}\n"
+                f"Anti-BC: {antibc_state}\n"
+                f"Anti-Spam: {antispam_state}\n"
+                f"Bot Status: {bot_status}"
+            )
+            group_info_list.append((group_info, chat_id))
+        except (PeerIdInvalid, ChannelInvalid) as e:
+            logger(__name__).error(f"Error fetching chat {chat_id}: {str(e)}")
+            group_info = (
+                f"ID: {chat_id}\n"
+                f"Status: Unable to fetch information. The group might not exist or the bot might have been removed.\n"
+                f"Error: {str(e)}"
+            )
+            group_info_list.append((group_info, chat_id))
+        except (ChatAdminRequired, ChatWriteForbidden, ChannelPrivate) as e:
+            logger(__name__).error(f"Permission error for chat {chat_id}: {str(e)}")
+            group_info = (
+                f"ID: {chat_id}\n"
+                f"Status: Unable to fetch complete information due to permission issues.\n"
+                f"Error: {str(e)}"
+            )
+            group_info_list.append((group_info, chat_id))
+        except Exception as e:
+            logger(__name__).error(f"Unexpected error for chat {chat_id}: {str(e)}")
+            group_info = (
+                f"ID: {chat_id}\n"
+                f"Status: Error fetching information\n"
+                f"Error: {str(e)}"
+            )
+            group_info_list.append((group_info, chat_id))
+
+    return group_info_list
+
+
+async def send_paginated_message(client, message, page):
+    global all_groups
+    total_pages = math.ceil(len(all_groups) / ITEMS_PER_PAGE)
+
+    # Ensure page is within bounds
+    page = max(1, min(page, total_pages))
+
+    group_info_list = await get_page_content(client, page)
+    keyboard = InlineKeyboard()
+
+    prev_page = total_pages if page == 1 else page - 1
+    next_page = 1 if page == total_pages else page + 1
+    keyboard.row(
+        InlineButton("◀️ Previous", f"CB_PAGE_CUSTOMER{prev_page}"),
+        InlineButton("Next ▶️", f"CB_PAGE_CUSTOMER{next_page}"),
+    )
+
+    for _, chat_id in group_info_list:
+        keyboard.row(InlineButton("View Link", f"CB_VIEW_LINK_{chat_id}"))
+
+    # Close button
+    keyboard.row(InlineButton("❎ Close", "CB_CLOSE"))
+
+    text = f"Group List (Page {page}/{total_pages}):\n\n" + "\n\n".join(
+        [info for info, _ in group_info_list]
+    )
+
+    try:
+        if isinstance(message, CallbackQuery):
+            await message.message.edit_text(text, reply_markup=keyboard)
+        else:
+            await message.reply_text(text, reply_markup=keyboard)
+    except MessageAuthorRequired:
+        await message.reply_text(text, reply_markup=keyboard)
+
+
+async def list_customer_func(client: Client, message: Message):
+    global all_groups
+    try:
+        all_groups = await groupdb.get_all_groups()
+        if all_groups:
+            await send_paginated_message(client, message, 1)
+        else:
+            await notification(message, "No groups found")
+    except Exception as e:
+        await notification(message, f"Error occurred: {str(e)}")
+
+
+@BOT.CALLBACK(r"^CB_PAGE_CUSTOMER(\d+)$")
+async def page_callback(client, callback_query):
+    page = int(callback_query.matches[0].group(1))
+    await send_paginated_message(client, callback_query, page)
+    await callback_query.answer()
+
+
+@BOT.CALLBACK(r"^CB_VIEW_LINK_(-?\d+)$")
+async def view_link_callback(client, callback_query):
+    chat_id = int(callback_query.matches[0].group(1))
+    try:
+        chat = await client.get_chat(chat_id)
+        invite_link = await client.export_chat_invite_link(chat_id)
+        if invite_link:
+            group_link = (
+                f"https://t.me/{chat.username}" if chat.username else invite_link
+            )
+        else:
+            group_link = (
+                f"https://t.me/{chat.username}"
+                if chat.username
+                else "No link available"
+            )
+
+        await callback_query.answer(f"Group Link: {group_link}", show_alert=True)
+    except Exception as e:
+        await callback_query.answer(f"Error fetching link: {str(e)}", show_alert=True)
