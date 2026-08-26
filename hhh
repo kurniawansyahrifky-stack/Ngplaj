@@ -1618,7 +1618,7 @@ async def gpt_voice(_, callback_query):
     
     user_id = callback_query.from_user.id
     data = callback_query.data.split("_")
-    args = str(data[1])
+    args = str(data[1]) # Model suara (alloy, echo, dll)
     uniq = str(data[2])
     query = state.get(uniq, "chatai")
     if not query:
@@ -1640,34 +1640,36 @@ async def gpt_voice(_, callback_query):
         )
     except Exception:
         pass
+        
     if user_id not in CONVERSATIONS:
-        CONVERSATIONS[user_id] = [
-            {
-                "role": "system",
-                "content": "Kamu adalah asisten paling canggih yang berbahasa Indonesia gaul, dan jangan gunakan bahasa inggris sebelum saya memulai duluan.",
-            },
-        ]
+        CONVERSATIONS[user_id] = []
+        
     while True:
         try:
-            CONVERSATIONS[user_id].append({"role": "user", "content": prompt})
-            payload = {"apikey": API_BOTCAHX, "message": CONVERSATIONS[user_id]}
-            
+            # 1. Minta teks jawaban dari AI BotcahX terlebih dahulu
+            payload = {
+                "apikey": API_BOTCAHX,
+                "message": [
+                    {"role": "system", "content": "Kamu adalah asisten suara yang ramah."},
+                    {"role": "user", "content": prompt}
+                ]
+            }
             r = await Tools.fetch.post(
                 "https://api.botcahx.eu.org/api/search/openai-custom-v2", json=payload
             )
             if r.status_code != 200:
-                return await edit_or_reply(
-                    message, text="<b>Please try again later..</b>"
-                )
+                return await edit_or_reply(message, text="<b>Please try again later..</b>")
+                
             res_data = r.json()
             result_text = res_data.get("result") or res_data.get("message") or res_data.get("data")
-            
             if not result_text:
                 return await edit_or_reply(message, text="<b>AI API Error or Limit Exceeded.</b>")
-                
-            CONVERSATIONS[user_id].append({"role": "assistant", "content": result_text})
+
+            # 2. Ubah teks jawaban AI menjadi Voice Note (Audio TTS) menggunakan endpoint BotcahX
+            tts_url = f"https://api.botcahx.eu.org/api/tools/tts?text={result_text}&apikey={API_BOTCAHX}"
             
-            reply = await message._client.send_message(chat_id, f"<b>Model: {args}</b>\n\n{result_text}")
+            # Kirim file audio/VN ke chat
+            reply = await message._client.send_audio(chat_id, tts_url, caption=f"<b>Model: {args}</b>\n\n<blockquote>{result_text}</blockquote>")
             
             next_message = await message._client.ask(
                 chat_id,
@@ -1683,7 +1685,6 @@ async def gpt_voice(_, callback_query):
         except Exception:
             logger.error(traceback.format_exc())
             return await edit_or_reply(message, text="<b>Please try again later..</b>")
-
 
 async def cine_plax(_, callback_query):
     if not callback_query.from_user:
