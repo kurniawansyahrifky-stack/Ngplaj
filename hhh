@@ -947,11 +947,13 @@ async def tools_userbot(_, callback_query):
 
 async def contact_admins(_, message):
     reply_text = (
-        "<b><emoji id=5328249826372132757>💬</emoji> Silahkan tulis pesan yang ingin anda sampaikan dengan hastag #ask dan mohon tunggu sampai admin membalasnya.</b>\n\n"
-        "<b><emoji id=5314275062536551842>👇</emoji> Atau Anda bisa langsung klik tombol di bawah ini untuk chat langsung dengan Admin.</b>"
+        "<b><blockquote expandable>"
+        "<emoji id=5443127283898405358>💬</emoji> Silahkan tulis pesan yang ingin anda sampaikan dengan hastag #ask dan mohon tunggu sampai admin membalasnya.\n\n"
+        "<emoji id=6138780272088322672>👇</emoji> Atau Anda bisa langsung klik tombol di bawah ini untuk chat langsung dengan Admin."
+        "</blockquote></b>"
     )
     
-    # Menggunakan tombol URL menuju owner dan tombol Back yang estetik
+    # Menggunakan tombol URL menuju owner dan tombol Back
     reply_markup = ikb(
         [
             [("💬 Chat Langsung Admin", f"https://t.me/{OWNER}", "url")],
