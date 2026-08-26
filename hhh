@@ -1618,7 +1618,7 @@ async def gpt_voice(_, callback_query):
     
     user_id = callback_query.from_user.id
     data = callback_query.data.split("_")
-    args = str(data[1]) # Model suara (alloy, echo, dll)
+    args = str(data[1])
     uniq = str(data[2])
     query = state.get(uniq, "chatai")
     if not query:
@@ -1629,7 +1629,6 @@ async def gpt_voice(_, callback_query):
     get_id = query["idm"]
     message = [obj for obj in get_objects() if id(obj) == get_id][0]
     
-    # Amankan dari error atribut objek
     chat_id = getattr(message, "chat", message).id if hasattr(getattr(message, "chat", message), "id") else message.id
     
     ids = (unpack_inline_message_id(callback_query.inline_message_id)).id
@@ -1641,12 +1640,9 @@ async def gpt_voice(_, callback_query):
     except Exception:
         pass
         
-    if user_id not in CONVERSATIONS:
-        CONVERSATIONS[user_id] = []
-        
     while True:
         try:
-            # 1. Minta teks jawaban dari AI BotcahX terlebih dahulu
+            # 1. Ambil teks jawaban dari AI BotcahX
             payload = {
                 "apikey": API_BOTCAHX,
                 "message": [
@@ -1665,11 +1661,11 @@ async def gpt_voice(_, callback_query):
             if not result_text:
                 return await edit_or_reply(message, text="<b>AI API Error or Limit Exceeded.</b>")
 
-            # 2. Ubah teks jawaban AI menjadi Voice Note (Audio TTS) menggunakan endpoint BotcahX
+            # 2. Ambil URL audio dari endpoint TTS BotcahX
             tts_url = f"https://api.botcahx.eu.org/api/tools/tts?text={result_text}&apikey={API_BOTCAHX}"
             
-            # Kirim file audio/VN ke chat
-            reply = await message._client.send_audio(chat_id, tts_url, caption=f"<b>Model: {args}</b>\n\n<blockquote>{result_text}</blockquote>")
+            # 3. KIRIM SEBAGAI VOICE NOTE (VN)
+            reply = await message._client.send_voice(chat_id, tts_url, caption=f"<b>Model: {args}</b>\n\n<blockquote>{result_text}</blockquote>")
             
             next_message = await message._client.ask(
                 chat_id,
@@ -1677,8 +1673,6 @@ async def gpt_voice(_, callback_query):
                 reply_to_message_id=reply.id,
             )
             if next_message.text.lower() == "stopped ask":
-                if user_id in CONVERSATIONS:
-                    del CONVERSATIONS[user_id]
                 await next_message.reply(f"**Conversation ended.**")
                 break
             prompt = next_message.text
