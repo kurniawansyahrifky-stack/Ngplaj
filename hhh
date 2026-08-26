@@ -947,18 +947,19 @@ async def tools_userbot(_, callback_query):
 
 async def contact_admins(_, message):
     reply_text = (
-        "<b>English:</b> Please write the message you want to convey with the hashtag #ask and please wait for the admin to reply.\n\n"
-        "<b>Indonesia:</b> Silahkan tulis pesan yang ingin anda sampaikan dengan hastag #ask dan mohon tunggu sampai admin membalas."
+        "<b><emoji id=5328249826372132757>💬</emoji> Silahkan tulis pesan yang ingin anda sampaikan dengan hastag #ask dan mohon tunggu sampai admin membalasnya.</b>\n\n"
+        "<b><emoji id=5314275062536551842>👇</emoji> Atau Anda bisa langsung klik tombol di bawah ini untuk chat langsung dengan Admin.</b>"
     )
-    # Menambahkan tombol URL ke owner dari config, dan tombol Back
+    
+    # Menggunakan tombol URL menuju owner dan tombol Back yang estetik
     reply_markup = ikb(
         [
-            [("💬 Hubungi Admin", f"https://t.me/{OWNER}", "url")],
-            [("🔙 Back", "starthome", "callback_data")]
+            [("💬 Chat Langsung Admin", f"https://t.me/{OWNER}", "url")],
+            [("🔙 Kembali ke Beranda", "starthome", "callback_data")]
         ]
     )
+    
     return await edit_or_reply(message, text=reply_text, reply_markup=reply_markup)
-
 
 async def closed_user(_, callback_query):
 
