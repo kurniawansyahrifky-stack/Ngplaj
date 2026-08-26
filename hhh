@@ -1486,16 +1486,19 @@ async def chatai_with_chatgpt_normal(_, query, uniq):
     prompt = data["prompt"]
     get_id = data["idm"]
     message = [obj for obj in get_objects() if id(obj) == get_id][0]
-    message.from_user.id
-    chat_id = message.chat.id
+    
+    # Amankan dari error atribut objek
+    chat_id = getattr(message, "chat", message).id if hasattr(getattr(message, "chat", message), "id") else message.id
+    
     ids = (unpack_inline_message_id(query.inline_message_id)).id
     try:
         await message._client.delete_messages(
-            message.chat.id,
+            chat_id,
             ids,
         )
     except Exception:
         pass
+
     messages_payload = [
         {
             "role": "system",
@@ -1503,29 +1506,36 @@ async def chatai_with_chatgpt_normal(_, query, uniq):
         },
         {
             "role": "assistant",
-            "content": (
-                "Kamu adalah asisten paling canggih yang berbahasa Indonesia gaul, dan jangan gunakan bahasa inggris sebelum saya memulai duluan."
-            ),
+            "content": "Kamu adalah asisten paling canggih yang berbahasa Indonesia gaul.",
         },
         {"role": "user", "content": HTML.clean_text(prompt)},
     ]
-    payload = {"message": messages_payload, "apikey": API_BOTCAHX}
+    
+    payload = {"apikey": API_BOTCAHX, "message": messages_payload}
+
     while True:
         try:
             r = await Tools.fetch.post(
-                "https://api.botcahx.eu.org/api/search/openai-custom", json=payload
+                "https://api.botcahx.eu.org/api/search/openai-custom-v2", json=payload
             )
             if r.status_code == 200:
-                result = r.json().get("result")
+                res_data = r.json()
+                result = res_data.get("result") or res_data.get("message") or res_data.get("data")
+                
+                if not result:
+                    return await edit_or_reply(
+                        message, text="<b>AI API returned empty response. Please try again later.</b>"
+                    )
+
                 if len(result) > 4096:
-                    with open(f"{prompt.split()[1]}.txt", "wb") as file:
+                    with open("ai_result.txt", "wb") as file:
                         file.write(result.encode("utf-8"))
                     reply = await message._client.send_document(
-                        chat_id, f"{prompt.split()[1]}.txt"
+                        chat_id, "ai_result.txt"
                     )
                     next_message = await message._client.ask(
                         chat_id,
-                        f"<b><u>Chat with ChatGpt</u></b>\nQuestion:</b>\n<blockquote>{prompt}</blockquote>\n\n**Type `stopped ask` to end the conversation.**",
+                        f"<b><u>Chat with ChatGPT</u></b>\nQuestion:\n<blockquote>{prompt}</blockquote>\n\n**Type `stopped ask` to end the conversation.**",
                         reply_to_message_id=reply.id,
                         timeout=300,
                     )
@@ -1534,9 +1544,10 @@ async def chatai_with_chatgpt_normal(_, query, uniq):
                         caption = f"<blockquote expandable>{result}</blockquote>"
                     else:
                         caption = f"<blockquote>{result}</blockquote>"
+                        
                     next_message = await message._client.ask(
                         chat_id,
-                        f"<b><u>Chat with ChatGpt</u></b>\n<b>Question:\n<blockquote>{prompt}</blockquote>\n\nAnswer:\n</b>{caption}\n\n**Type `stopped ask` to end the conversation.**",
+                        f"<b><u>Chat with ChatGPT</u></b>\n<b>Question:\n<blockquote>{prompt}</blockquote>\n\nAnswer:\n</b>{caption}\n\n**Type `stopped ask` to end the conversation.**",
                     )
                     if next_message.text.lower() == "stopped ask":
                         await next_message.reply(f"**Conversation ended.**")
@@ -1544,7 +1555,7 @@ async def chatai_with_chatgpt_normal(_, query, uniq):
                     prompt = next_message.text
             else:
                 return await edit_or_reply(
-                    message, text="<b>Please try again later..</b>"
+                    message, text=f"<b>API Error {r.status_code}</b>"
                 )
         except Exception:
             logger.error(traceback.format_exc())
@@ -1604,6 +1615,8 @@ async def gpt_voice(_, callback_query):
         return await callback_query.answer("ANAK ANJING!!", True)
     if callback_query.from_user.id not in session.get_list():
         return await callback_query.answer("GW BUNTUNGIN TANGAN LO YA MEMEK", True)
+    
+    user_id = callback_query.from_user.id
     data = callback_query.data.split("_")
     args = str(data[1])
     uniq = str(data[2])
@@ -1615,40 +1628,55 @@ async def gpt_voice(_, callback_query):
     prompt = query["prompt"]
     get_id = query["idm"]
     message = [obj for obj in get_objects() if id(obj) == get_id][0]
-    chat_id = message.chat.id
-    user_id = message.from_user.id
+    
+    # Amankan dari error atribut objek
+    chat_id = getattr(message, "chat", message).id if hasattr(getattr(message, "chat", message), "id") else message.id
+    
     ids = (unpack_inline_message_id(callback_query.inline_message_id)).id
     try:
         await message._client.delete_messages(
-            message.chat.id,
+            chat_id,
             ids,
         )
     except Exception:
         pass
     if user_id not in CONVERSATIONS:
-        CONVERSATIONS[user_id] = []
+        CONVERSATIONS[user_id] = [
+            {
+                "role": "system",
+                "content": "Kamu adalah asisten paling canggih yang berbahasa Indonesia gaul, dan jangan gunakan bahasa inggris sebelum saya memulai duluan.",
+            },
+        ]
     while True:
         try:
-            headers = {"mg-apikey": API_MAELYN}
-            params = {"q": prompt, "model": args}
-            url = "https://api.maelyn.sbs/api/chatgpt/audio"
-            response = await Tools.fetch.get(url, headers=headers, params=params)
-            if response.status_code != 200:
+            CONVERSATIONS[user_id].append({"role": "user", "content": prompt})
+            payload = {"apikey": API_BOTCAHX, "message": CONVERSATIONS[user_id]}
+            
+            r = await Tools.fetch.post(
+                "https://api.botcahx.eu.org/api/search/openai-custom-v2", json=payload
+            )
+            if r.status_code != 200:
                 return await edit_or_reply(
                     message, text="<b>Please try again later..</b>"
                 )
-            data = response.json()
-            result_data = data.get("result")
-            audio = result_data["url"]
-            CONVERSATIONS[user_id].append(audio)
-            reply = await message._client.send_audio(chat_id, audio)
+            res_data = r.json()
+            result_text = res_data.get("result") or res_data.get("message") or res_data.get("data")
+            
+            if not result_text:
+                return await edit_or_reply(message, text="<b>AI API Error or Limit Exceeded.</b>")
+                
+            CONVERSATIONS[user_id].append({"role": "assistant", "content": result_text})
+            
+            reply = await message._client.send_message(chat_id, f"<b>Model: {args}</b>\n\n{result_text}")
+            
             next_message = await message._client.ask(
                 chat_id,
-                f"**Model: {args}**\n\n<b>Question:\n<blockquote>{prompt}</blockquote>\n\n**Type `stopped ask` to end the conversation.**",
+                f"**Type `stopped ask` to end the conversation.**",
                 reply_to_message_id=reply.id,
             )
             if next_message.text.lower() == "stopped ask":
-                del CONVERSATIONS[user_id]
+                if user_id in CONVERSATIONS:
+                    del CONVERSATIONS[user_id]
                 await next_message.reply(f"**Conversation ended.**")
                 break
             prompt = next_message.text
