@@ -1610,6 +1610,8 @@ async def chat_gpt(client, query):
         return await query.edit_message_text(msg, reply_markup=reply_markup)
 
 
+import os
+
 async def gpt_voice(_, callback_query):
     if not callback_query.from_user:
         return await callback_query.answer("ANAK ANJING!!", True)
@@ -1641,6 +1643,7 @@ async def gpt_voice(_, callback_query):
         pass
         
     while True:
+        audio_path = None
         try:
             # 1. Ambil teks jawaban dari AI BotcahX
             payload = {
@@ -1661,11 +1664,29 @@ async def gpt_voice(_, callback_query):
             if not result_text:
                 return await edit_or_reply(message, text="<b>AI API Error or Limit Exceeded.</b>")
 
-            # 2. Ambil URL audio dari endpoint TTS BotcahX
+            # 2. Ambil URL audio TTS dari BotcahX
             tts_url = f"https://api.botcahx.eu.org/api/tools/tts?text={result_text}&apikey={API_BOTCAHX}"
             
-            # 3. KIRIM SEBAGAI VOICE NOTE (VN)
-            reply = await message._client.send_voice(chat_id, tts_url, caption=f"<b>Model: {args}</b>\n\n<blockquote>{result_text}</blockquote>")
+            # 3. Download file audio ke VPS agar valid dikirim sebagai VN
+            resp = await Tools.fetch.get(tts_url)
+            if resp.status_code == 200:
+                audio_path = f"voice_{user_id}.ogg"
+                with open(audio_path, "wb") as f:
+                    f.write(resp.content)
+            
+            if not audio_path or not os.path.exists(audio_path):
+                return await edit_or_reply(message, text="<b>Failed to generate voice note.</b>")
+
+            # 4. Kirim sebagai Voice Note (VN) dari file lokal VPS
+            reply = await message._client.send_voice(
+                chat_id, 
+                audio_path, 
+                caption=f"<b>Model: {args}</b>\n\n<blockquote>{result_text}</blockquote>"
+            )
+            
+            # Hapus file lokal setelah terkirim
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
             
             next_message = await message._client.ask(
                 chat_id,
@@ -1677,6 +1698,8 @@ async def gpt_voice(_, callback_query):
                 break
             prompt = next_message.text
         except Exception:
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
             logger.error(traceback.format_exc())
             return await edit_or_reply(message, text="<b>Please try again later..</b>")
 
